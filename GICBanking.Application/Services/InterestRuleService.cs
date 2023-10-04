@@ -59,78 +59,18 @@ namespace GICBanking.Application.Services
                 DateTime startOfMonth = new DateTime(year, month, 1);
                 DateTime endOfMonth = startOfMonth.AddMonths(1).AddDays(-1);
 
-                Dictionary<DateTime, DateTime> _ratePeriod = new Dictionary<DateTime, DateTime>();
-                Dictionary<DateTime, DateTime> _TrnascationPair = new Dictionary<DateTime, DateTime>();
-                var rateList = bankDTO.interestRules.Where(x => x.DateTimeFormat <= endOfMonth).OrderBy(x => x.DateTimeFormat).ToList();
-
-                for (int i = 0; i < rateList.Count(); i++)
+                for (DateTime currentDate = startOfMonth; currentDate <= endOfMonth; currentDate = currentDate.AddDays(1))
                 {
-                    
-                    var startDate = rateList[i].DateTimeFormat.Value;
-                    var EndDate = endOfMonth;
-                    if (i < rateList.Count() - 1)
-                    {
-                        EndDate = rateList[i + 1].DateTimeFormat.Value.AddDays(-1);
-                    }
+                    var rate = bankDTO.interestRules.Where(x => x.DateTimeFormat <= currentDate)
+                        .OrderByDescending(x => x.DateTimeFormat)?.FirstOrDefault();
 
-                    //var periodDic = new Dictionary<DateTime, DateTime>();
-                    //periodDic.Add(startDate, EndDate);
-                    _ratePeriod.Add(startDate, EndDate);
-                }
-
-                var TransactionList = bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date >= startOfMonth && x.Date <= endOfMonth).OrderBy(x => x.Date).Distinct(new AttributeComparer()).ToList();
-                for (int i = 0; i < TransactionList.Count(); i++)
-                {
-                    var startDate = TransactionList[i].Date.Value;
-                    var EndDate = endOfMonth;
-                    if (i < TransactionList.Count() - 1)
-                    {
-                        EndDate = TransactionList[i + 1].Date.Value.AddDays(-1);
-                    }
-                    if (!_TrnascationPair.ContainsKey(startDate))
-                        _TrnascationPair.Add(startDate, EndDate);
-                }
-
-                if(!_TrnascationPair.Any(x => x.Key == startOfMonth))
-                {
-                    _TrnascationPair.Add(startOfMonth, _TrnascationPair.Count() != 0 ? _TrnascationPair.OrderBy(x => x.Key).FirstOrDefault().Key.AddDays(-1) : endOfMonth);
-                }
-
-                foreach (var item in _TrnascationPair)
-                {
-                    var pivotPeriod = _ratePeriod.Where(x => x.Value >= item.Key).ToList();
-                    foreach (var item2 in pivotPeriod)
-                    {
-                        if (item.Key >= item2.Key && item.Value >= item2.Value)
-                        {
-                            decimal? rate = rateList.Where(x => x.DateTimeFormat == item2.Key).FirstOrDefault()?.Rate;
-                            decimal? runningBalance = bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item2.Value && x.Type.ToLower() == "d").Sum(y => y.Amount) - bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item2.Value && x.Type.ToLower() == "w").Sum(y => y.Amount);
-                            TimeSpan difference = item.Key - item2.Value;
-                            collectiveIntrest += ((Math.Abs(difference.Days) + 1) * (rate / 100) * runningBalance);
-
-                        }
-                        else if (item.Key <= item2.Key && item.Value >= item2.Value)
-                        {
-                            decimal? rate = rateList.Where(x => x.DateTimeFormat == item2.Key).FirstOrDefault()?.Rate;
-                            decimal? runningBalance = bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item2.Value && x.Type.ToLower() == "d").Sum(y => y.Amount) - bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item2.Value && x.Type.ToLower() == "w").Sum(y => y.Amount);
-                            TimeSpan difference = item2.Key - item2.Value;
-                            collectiveIntrest += ((Math.Abs(difference.Days) + 1) * (rate / 100) * runningBalance);
-
-                        }
-                        else if (item.Key <= item2.Key && item.Value <= item2.Value)
-                        {
-                            decimal? rate = rateList.Where(x => x.DateTimeFormat == item2.Key).FirstOrDefault()?.Rate;
-                            decimal? runningBalance = bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item.Value && x.Type.ToLower() == "d").Sum(y => y.Amount) - bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item.Value && x.Type.ToLower() == "w").Sum(y => y.Amount);
-                            TimeSpan difference = item2.Key - item.Value;
-                            collectiveIntrest += ((Math.Abs(difference.Days) + 1) * (rate / 100) * runningBalance);
-                        }else if(item.Key >= item2.Key && item.Value <= item2.Value)
-                        {
-                            decimal? rate = rateList.Where(x => x.DateTimeFormat == item2.Key).FirstOrDefault()?.Rate;
-                            decimal? runningBalance = bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item.Value &&  x.Type.ToLower() == "d").Sum(y => y.Amount) - bankDTO.accounts[accountNumber].Transactions.Where(x => x.Date <= item.Value && x.Type.ToLower() == "w").Sum(y => y.Amount);
-                            TimeSpan difference = item.Key - item.Value;
-                            collectiveIntrest += ((Math.Abs(difference.Days) + 1) * (rate / 100) * runningBalance);
-                        }
-                    }
+                    var runningBalance = bankDTO.accounts[accountNumber].Transactions
+                                             .Where(x => x.Date <= currentDate && x.Type.ToLower() == "d")
+                                             ?.Sum(x => x.Amount) -
+                                         bankDTO.accounts[accountNumber].Transactions
+                                             .Where(x => x.Date <= currentDate && x.Type.ToLower() == "w")
+                                             ?.Sum(x => x.Amount);
+                    collectiveIntrest += (rate != null ? ((rate.Rate != null ? rate.Rate : 0) / 100) : 0) * (runningBalance != null ? runningBalance : 0);
 
                 }
 
@@ -147,7 +87,7 @@ namespace GICBanking.Application.Services
                 throw ex;
             }
 
-        }
+        }       
 
         private class AttributeComparer : IEqualityComparer<Transaction>
         {
